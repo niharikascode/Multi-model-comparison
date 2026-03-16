@@ -1,3 +1,4 @@
+import React from 'react'
 import { AVAILABLE_MODELS } from '../../constants/models';
 
 const s = { mono: 'JetBrains Mono, monospace' };
