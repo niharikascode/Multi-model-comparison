@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
-const BACKEND_URL = 'http://localhost:8000';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 const s = { display: 'Syne, sans-serif', mono: 'JetBrains Mono, monospace' };
 
 const AVAILABLE_MODELS = [

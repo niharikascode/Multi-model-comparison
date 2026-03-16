@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { AVAILABLE_MODELS, getModelInfo } from '../constants/models';
 import ModelSelector from '../Components/Body/ModelSelector';
 
-const BACKEND_URL = 'http://localhost:8000';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 const s = { display: 'Syne, sans-serif', mono: 'JetBrains Mono, monospace' };
 
 const parseRating = (text) => {
