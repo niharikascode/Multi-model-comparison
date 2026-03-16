@@ -1,108 +1,206 @@
-
-
 from fastapi import FastAPI
 from pydantic import BaseModel
 import requests
 import os
+import sqlite3
+import json
+import re
+from datetime import datetime
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 
-# Load environment variables
 load_dotenv()
-
-# Read the API key from the environment
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# Initialize FastAPI app
 app = FastAPI()
 
-# Add CORS middleware to allow frontend (React) requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development; change in production
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Define the request schema for prompt and models
+# ── SQLite setup ──────────────────────────────────────────────
+DB_PATH = "battles.db"
+
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS battles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prompt TEXT NOT NULL,
+            models TEXT NOT NULL,
+            responses TEXT NOT NULL,
+            ratings TEXT NOT NULL,
+            avg_scores TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# ── Schemas ───────────────────────────────────────────────────
 class PromptRequest(BaseModel):
     prompt: str
-    models: list[str]  # List of model names
+    models: list[str]
 
-# Define a function to ask the model to generate a rating for a specific response
-def get_model_rating_for_response(prompt: str, model: str, response: str):
-    # Construct the prompt to rate a specific response
-    ratings_request = f"Please rate the following response on a scale of 1 to 10 based on how well it answers the prompt. your response should be in 50 words. In the end just mention [rating: ] for this prompt : '{prompt}'\n"
-    ratings_request += f"Response: {response}\n"
-    ratings_request += f"Rating for this response:"
-
-    # Ask the model to rate the response from another model
-    data = {
-        "messages": [{"role": "user", "content": ratings_request}],
-        "model": model
-    }
-    
+# ── Helpers ───────────────────────────────────────────────────
+def call_groq(model: str, messages: list) -> str:
+    data = {"messages": messages, "model": model}
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
-    
     try:
-        response = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",  # Update to the correct API URL
-            headers=headers,
-            json=data,
-            timeout=60
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers=headers, json=data, timeout=60
         )
-        result = response.json()
-        rating = result['choices'][0]['message']['content']
-        return rating
+        result = r.json()
+        # Surface the actual Groq error message instead of hiding it
+        if "error" in result:
+            error_msg = result["error"].get("message", str(result["error"]))
+            return f"[groq error] {error_msg}"
+        return result["choices"][0]["message"]["content"]
     except Exception as e:
-        return f"Error calling model: {str(e)}"
+        return f"[request error] {str(e)}"
 
-# Define the POST endpoint to receive prompt and models
+def get_model_rating(prompt: str, model: str, response: str) -> str:
+    # Skip rating if the response itself was an error
+    if response.startswith("[groq error]") or response.startswith("[request error]"):
+        return "[rating: 0] Could not rate — model returned an error."
+    rating_prompt = (
+        f"Please rate the following response on a scale of 1 to 10 based on how well it answers the prompt. "
+        f"Your response should be in 50 words. In the end just mention [rating: ] "
+        f"for this prompt: '{prompt}'\nResponse: {response}\nRating for this response:"
+    )
+    return call_groq(model, [{"role": "user", "content": rating_prompt}])
+
+def parse_score(text: str) -> float | None:
+    m = re.search(r'\[rating:\s*(\d+(?:\.\d+)?)\]', str(text), re.IGNORECASE)
+    if m:
+        return float(m.group(1))
+    m = re.search(r'\b(10|[1-9])\b', str(text))
+    return float(m.group(1)) if m else None
+
+# ── Routes ────────────────────────────────────────────────────
+@app.get("/models")
+def list_models():
+    """Fetch live model list directly from Groq so frontend always has valid models."""
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    try:
+        r = requests.get("https://api.groq.com/openai/v1/models", headers=headers, timeout=10)
+        data = r.json()
+        models = [
+            {"id": m["id"], "owned_by": m.get("owned_by", "")}
+            for m in data.get("data", [])
+            # Only chat models — exclude whisper/tts/guard/safeguard
+            if not any(x in m["id"] for x in ["whisper", "tts", "guard", "safeguard", "distil"])
+        ]
+        return {"models": sorted(models, key=lambda x: x["id"])}
+    except Exception as e:
+        return {"models": [], "error": str(e)}
+
+
 @app.post("/ask")
 def call_multiple_models(request: PromptRequest):
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
+    # Step 1: Get responses
     responses = {}
-
-    # Step 1: Get responses from models
     for model in request.models:
-        data = {
-            "messages": [{"role": "user", "content": request.prompt}],
-            "model": model
-        }
-        try:
-            response = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions",  # Update to the correct API URL
-                headers=headers,
-                json=data,
-                timeout=60  # Add timeout for safety
-            )
-            result = response.json()
-            output = result['choices'][0]['message']['content']
-        except Exception as e:
-            output = f"Error calling model: {str(e)}"
-        
-        responses[model] = output
+        responses[model] = call_groq(model, [{"role": "user", "content": request.prompt}])
 
-    # Step 2: Ask each model to rate responses from all models (including its own)
+    # Step 2: Peer ratings
     ratings = {model: {} for model in request.models}
-
     for model in request.models:
         for other_model in request.models:
-            # Get rating for the response from any model (including its own)
-            rating = get_model_rating_for_response(request.prompt, model, responses[other_model])
-            ratings[model][other_model] = rating
+            ratings[model][other_model] = get_model_rating(
+                request.prompt, model, responses[other_model]
+            )
 
-    # Step 3: Return the responses and the ratings
+    # Step 3: Calculate avg scores
+    avg_scores = {}
+    for model in request.models:
+        scores = [
+            parse_score(ratings[rater][model])
+            for rater in request.models if rater != model
+        ]
+        scores = [s for s in scores if s is not None]
+        avg_scores[model] = round(sum(scores) / len(scores), 2) if scores else 0.0
+
+    # Step 4: Save to SQLite
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO battles (prompt, models, responses, ratings, avg_scores, created_at) VALUES (?,?,?,?,?,?)",
+        (
+            request.prompt,
+            json.dumps(request.models),
+            json.dumps(responses),
+            json.dumps(ratings),
+            json.dumps(avg_scores),
+            datetime.utcnow().isoformat()
+        )
+    )
+    conn.commit()
+    conn.close()
+
     return {
         "prompt": request.prompt,
         "responses": responses,
-        "ratings": ratings
+        "ratings": ratings,
+        "avg_scores": avg_scores,
     }
+
+
+@app.get("/stats")
+def get_stats():
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM battles ORDER BY created_at DESC").fetchall()
+    conn.close()
+
+    battles = []
+    model_totals = {}
+
+    for row in rows:
+        avg_scores = json.loads(row["avg_scores"])
+        battles.append({
+            "id": row["id"],
+            "prompt": row["prompt"],
+            "models": json.loads(row["models"]),
+            "avg_scores": avg_scores,
+            "created_at": row["created_at"],
+        })
+        for model, score in avg_scores.items():
+            model_totals.setdefault(model, []).append(score)
+
+    leaderboard = [
+        {"model": model, "avg": round(sum(scores) / len(scores), 2), "battles": len(scores)}
+        for model, scores in model_totals.items()
+    ]
+    leaderboard.sort(key=lambda x: x["avg"], reverse=True)
+
+    return {
+        "battles": battles,
+        "leaderboard": leaderboard,
+        "total_battles": len(battles),
+    }
+
+
+@app.delete("/stats/clear")
+def clear_stats():
+    conn = get_db()
+    conn.execute("DELETE FROM battles")
+    conn.commit()
+    conn.close()
+    return {"message": "All battles cleared"}

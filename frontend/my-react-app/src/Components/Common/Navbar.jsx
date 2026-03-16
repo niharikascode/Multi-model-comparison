@@ -1,98 +1,47 @@
-import React, { useState } from 'react'
-import { Link } from "react-router-dom"
-import { HiOutlineUser,  HiBars3BottomRight } from "react-icons/hi2"
-import { IoMdClose } from "react-icons/io"
+import { NavLink } from 'react-router-dom';
+
+const s = {
+  display: 'Syne, sans-serif',
+  mono: 'JetBrains Mono, monospace',
+};
 
 const Navbar = () => {
+  return (
+    <nav style={{
+      borderBottom: '1px solid rgba(99,179,237,0.08)',
+      padding: '0 1.5rem',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      height: 56, position: 'sticky', top: 0, zIndex: 100,
+      background: 'rgba(4,6,15,0.85)', backdropFilter: 'blur(12px)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 18, }}>⚡</span>
+        <span style={{ fontFamily: s.display, fontWeight: 800, fontSize: 15, color: '#e8f0fe', letterSpacing: '-0.02em' }}>
+          AI Battle
+        </span>
+      </div>
 
-    const [drawerOpen, setDrawerOpen] = useState(false)
+      <div style={{ display: 'flex', gap: 4 }}>
+        {[
+          { to: '/', label: 'Battle' },
+          { to: '/blind', label: 'Blind Mode' },
+          { to: '/stats', label: 'Stats' },
+        ].map(({ to, label }) => (
+          <NavLink key={to} to={to} end style={({ isActive }) => ({
+            padding: '6px 14px', borderRadius: 6,
+            fontFamily: s.mono, fontSize: 11, letterSpacing: '0.05em',
+            textDecoration: 'none',
+            background: isActive ? 'rgba(99,179,237,0.12)' : 'transparent',
+            border: `1px solid ${isActive ? 'rgba(99,179,237,0.35)' : 'transparent'}`,
+            color: isActive ? '#90cdf4' : '#4a5568',
+            transition: 'all 0.15s',
+          })}>
+            {label}
+          </NavLink>
+        ))}
+      </div>
+    </nav>
+  );
+};
 
-    const [navDrawerOpen, setNavDrawerOpen] = useState(false)
-
-    const toggleNavDrawer = () => {
-        setNavDrawerOpen(!navDrawerOpen)
-
-    }
-
-    return (
-        <>
-            <nav className='container mx-auto flex items-center justify-between py-4 px-4'>
-                {/* Left Logo */}
-                <div>
-                    <Link to="/" className='text-2xl font-medium'>
-                        AI-Models Battle
-                    </Link>
-                </div>
-                {/* Center - Navigation */}
-                <div className='hidden md:flex space-x-6'>
-                    <Link to="#" className='text-gray-700 hover:text-black text-sm font-medium uppercase'>
-                        Models
-                    </Link>
-                    <Link to="#" className='text-gray-700 hover:text-black text-sm font-medium uppercase'>
-                        How to Use
-                    </Link>
-                    <Link to="#" className='text-gray-700 hover:text-black text-sm font-medium uppercase'>
-                        About
-                    </Link>
-                </div>
-
-                {/* Right icons */}
-                <div className='flex items-center space-x-4'>
-                    <Link to="/profile" className='hover:text-black'>
-                        <HiOutlineUser className='h-6 w-6 text-gray-700' />
-                    </Link>
-
-                    {/* hamburger ion */}
-                    <button
-                        onClick={toggleNavDrawer}
-                        className='md:hidden'>
-                        <HiBars3BottomRight className='h-6 w-6 text-gray-700' />
-                    </button>
-                </div>
-            </nav>
-
-            {/* Mobile Navigation */}
-            <div
-                className={`fixed top-0 left-0 w-3/4 sm:w-1/2 md:w-1/3 h-full bg-white shadow-lg
-                transform-transition duration-300 z-50 ${navDrawerOpen ? " translate-x-0" : "-translate-x-full"}`}
-            >
-                <div
-                    className='flex justify-end p-4'
-                >
-                    <button
-                        onClick={toggleNavDrawer}
-                    >
-                        <IoMdClose className="h-6 w-6 text-gray-600" />
-                    </button>
-
-                </div>
-
-                <div
-                    className='p-4'>
-                    <h2 className='text-xl font-semibold mb-4'>Menu</h2>
-                    <nav
-                        className='space-y-4'
-                    >
-                        <Link tp='#' onClick={toggleNavDrawer} className='block  text-gray-600 hover:text-black'>
-                            BRIDALS
-                        </Link>
-                        <Link tp='#' onClick={toggleNavDrawer} className='block  text-gray-600 hover:text-black'>
-                            SERVICES
-                        </Link>
-                        <Link tp='#' onClick={toggleNavDrawer} className='block  text-gray-600 hover:text-black'>
-                            ACCESSORIES
-                        </Link>
-                        <Link tp='#' onClick={toggleNavDrawer} className='block  text-gray-600 hover:text-black'>
-                            OFFERS
-                        </Link>
-                    </nav>
-
-                </div>
-
-            </div>
-
-        </>
-    )
-}
-
-export default Navbar
+export default Navbar;
