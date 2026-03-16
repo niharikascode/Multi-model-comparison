@@ -93,6 +93,11 @@ def parse_score(text: str) -> float | None:
     return float(m.group(1)) if m else None
 
 # ── Routes ────────────────────────────────────────────────────
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "AI Battle API is running"}
+
+
 @app.get("/models")
 def list_models():
     """Fetch live model list directly from Groq so frontend always has valid models."""
