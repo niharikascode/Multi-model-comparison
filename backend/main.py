@@ -23,7 +23,7 @@ app.add_middleware(
 )
 
 # ── SQLite setup ──────────────────────────────────────────────
-DB_PATH = "battles.db"
+DB_PATH = "/tmp/battles.db"
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -93,7 +93,7 @@ def parse_score(text: str) -> float | None:
     return float(m.group(1)) if m else None
 
 # ── Routes ────────────────────────────────────────────────────
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {"status": "ok", "message": "AI Battle API is running"}
 
