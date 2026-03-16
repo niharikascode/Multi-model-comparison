@@ -1,3 +1,4 @@
+import React from 'react'
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { AVAILABLE_MODELS, getModelInfo } from '../constants/models';
